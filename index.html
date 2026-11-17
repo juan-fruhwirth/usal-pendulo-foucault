@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Péndulo de Foucault - Simulador</title>
+<style>
+  :root {
+    --fondo: #0f1419; --panel: #171d25; --borde: #2a3441; --texto: #e6e9ee; --suave: #8b97a7;
+    --ambar: #f2b84b; --cian: #5bc0de; --verde: #6ad39a; --rojo: #ef6b6b;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--fondo); color: var(--texto);
+         font: 14px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between;
+           padding: 10px 16px; border-bottom: 1px solid var(--borde); }
+  header h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  header small { color: var(--suave); font-weight: 400; }
+  .controles { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .sep { width: 1px; height: 22px; background: var(--borde); margin: 0 4px; }
+  button { background: var(--panel); color: var(--texto); border: 1px solid var(--borde); border-radius: 6px;
+           padding: 6px 10px; cursor: pointer; font: inherit; }
+  button:hover { border-color: var(--suave); }
+  button.activo { border-color: var(--ambar); color: var(--ambar); }
+  button.alerta { border-color: var(--rojo); color: var(--rojo); }
+  main { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 12px; padding: 12px 16px; }
+  .caja { background: var(--panel); border: 1px solid var(--borde); border-radius: 8px; }
+  #escena-caja { position: relative; height: 580px; overflow: hidden; }
+  #escena { width: 100%; height: 100%; display: block; }
+  #leyenda { position: absolute; left: 10px; top: 8px; font-size: 12px; color: var(--suave); pointer-events: none; }
+  #leyenda span { display: inline-block; width: 10px; height: 3px; margin: 0 5px 2px 10px; vertical-align: middle; }
+  #nota { position: absolute; left: 10px; bottom: 8px; color: var(--suave); font-size: 12px; pointer-events: none; }
+  #estado-chip { position: absolute; right: 10px; top: 8px; padding: 3px 10px; border-radius: 99px; font-size: 12px;
+                 border: 1px solid var(--verde); color: var(--verde); }
+  #estado-chip.barrido { border-color: var(--rojo); color: var(--rojo); }
+  #indicadores { padding: 10px 14px; overflow-y: auto; max-height: 580px; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--suave);
+       margin: 12px 0 4px; font-weight: 600; }
+  h2:first-child { margin-top: 0; }
+  .fila { display: flex; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid #222b36; }
+  .fila span:first-child { color: var(--suave); }
+  .fila span:last-child { font-variant-numeric: tabular-nums; text-align: right; }
+  .grande { font-size: 20px; color: var(--ambar); }
+  #registro { grid-column: 1 / -1; padding: 10px 14px; }
+  #tabla-caja { max-height: 300px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 3px 10px; white-space: nowrap; }
+  th { position: sticky; top: 0; background: var(--panel); color: var(--suave); font-weight: 500;
+       border-bottom: 1px solid var(--borde); }
+  td { border-bottom: 1px solid #1e2631; }
+  td.linea { font-family: ui-monospace, Consolas, monospace; font-size: 12px; color: var(--suave); }
+  .t-Cruce { color: var(--suave); } .t-Medición { color: var(--texto); } .t-Corrección { color: var(--cian); }
+  .t-Pérdida { color: var(--rojo); } .t-Recuperación { color: var(--verde); } .t-Descartada { color: var(--ambar); }
+  .t-Simulación { color: var(--ambar); }
+  #filtros { display: inline-flex; gap: 10px; margin-left: 12px; font-size: 12px; text-transform: none; letter-spacing: 0; }
+  #filtros label { color: var(--suave); cursor: pointer; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } #escena-caja { height: 380px; } #indicadores { max-height: none; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Péndulo de Foucault <small>· simulador del sistema de instrumentación · Pilar 34,45° S · cable de 7 m</small></h1>
+  <div class="controles">
+    <span style="color:var(--suave)">Velocidad</span><span id="botones-vel"></span>
+    <button id="btn-pausa">Pausa</button>
+    <span class="sep"></span>
+    <button id="btn-perturbar" title="Gira el plano 25° de golpe: los sensores pierden el imán">Perturbar plano</button>
+    <button id="btn-cable" title="Daña al azar un 2 % de las líneas del cable serie">Cable con ruido</button>
+    <span class="sep"></span>
+    <button id="btn-reiniciar">Reiniciar</button>
+  </div>
+</header>
+
+<main>
+  <div class="caja" id="escena-caja">
+    <canvas id="escena"></canvas>
+    <div id="leyenda"><span style="background:#f2b84b"></span>plano real<span style="background:#5bc0de"></span>torre de sensores (la mueve el motor)</div>
+    <div id="estado-chip">Siguiendo</div>
+    <div id="nota">Arrastrá para girar la cámara · rueda para acercar · amplitud y torre dibujadas ×3</div>
+  </div>
+
+  <div class="caja" id="indicadores">
+    <h2>Simulación</h2>
+    <div class="fila"><span>Tiempo simulado</span><span id="i-tiempo" class="grande">-</span></div>
+    <div class="fila"><span>Reloj simulado</span><span id="i-reloj">-</span></div>
+    <div class="fila"><span>Período medido</span><span id="i-periodo">-</span></div>
+    <h2>Medición (lo que reporta el Arduino)</h2>
+    <div class="fila"><span>Tramo</span><span id="i-tramo">-</span></div>
+    <div class="fila"><span>Ciclos guardados</span><span id="i-ciclos">-</span></div>
+    <div class="fila"><span>Azimut del tramo (pasos)</span><span id="i-azimut">-</span></div>
+    <div class="fila"><span>Resolución</span><span id="i-resol">-</span></div>
+    <h2>Precesión</h2>
+    <div class="fila"><span>Ω medida</span><span id="i-omega">-</span></div>
+    <div class="fila"><span>Ω teórica</span><span id="i-teorica">-</span></div>
+    <div class="fila"><span>Cumplimiento</span><span id="i-cumpl" class="grande">-</span></div>
+    <h2>Robustez</h2>
+    <div class="fila"><span>Huecos (pérdidas de referencia)</span><span id="i-huecos">-</span></div>
+    <div class="fila"><span>Líneas recibidas / descartadas</span><span id="i-lineas">-</span></div>
+    <div class="fila"><span>Ciclos incompletos</span><span id="i-incompletos">-</span></div>
+    <h2>Solo visible en simulación</h2>
+    <div class="fila"><span>Desvío real torre − plano</span><span id="i-desvio">-</span></div>
+  </div>
+
+  <div class="caja" id="registro">
+    <h2>Registro de eventos en vivo
+      <span id="filtros">
+        <label><input type="checkbox" data-t="Cruce" checked> Cruces</label>
+        <label><input type="checkbox" data-t="Medición" checked> Mediciones</label>
+        <label><input type="checkbox" data-t="Corrección" checked> Correcciones</label>
+      </span>
+    </h2>
+    <div id="tabla-caja">
+      <table>
+        <thead><tr><th>Fecha y hora simulada</th><th>Evento</th><th>Detalle</th><th>Línea recibida por el cable serie</th></tr></thead>
+        <tbody id="cuerpo"></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<script src="/static/three.min.js"></script>
+<script>
+// ------------------------------------------------------------------ constantes de dibujo
+const K = 3;                          // factor de dibujo de la amplitud y la torre (solo visual)
+const MAX_FILAS = 200;
+const R_PISO = 2.4;
+
+let estado = null, tRecibido = 0, sesionActual = null, ultimoSeq = 0, L = 7.0;
+const ocultos = new Set();            // tipos de evento filtrados en la tabla
+
+// ------------------------------------------------------------------ escena 3D
+const canvas = document.getElementById('escena');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0f1419);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
+const objetivo = new THREE.Vector3(0, 2.9, 0);
+const cam = { theta: 0.75, phi: 1.05, r: 13.5 };
+
+function ubicarCamara() {
+  camera.position.set(objetivo.x + cam.r * Math.sin(cam.phi) * Math.sin(cam.theta),
+                      objetivo.y + cam.r * Math.cos(cam.phi),
+                      objetivo.z + cam.r * Math.sin(cam.phi) * Math.cos(cam.theta));
+  camera.lookAt(objetivo);
+}
+function ajustarTamano() {
+  const caja = canvas.parentElement;
+  renderer.setSize(caja.clientWidth, caja.clientHeight, false);
+  camera.aspect = caja.clientWidth / caja.clientHeight;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', ajustarTamano);
+let arrastrando = false, px = 0, py = 0;
+canvas.addEventListener('pointerdown', e => { arrastrando = true; px = e.clientX; py = e.clientY; });
+window.addEventListener('pointerup', () => arrastrando = false);
+window.addEventListener('pointermove', e => {
+  if (!arrastrando) return;
+  cam.theta -= (e.clientX - px) * 0.008;
+  cam.phi = Math.min(1.5, Math.max(0.15, cam.phi - (e.clientY - py) * 0.008));
+  px = e.clientX; py = e.clientY;
+});
+canvas.addEventListener('wheel', e => { e.preventDefault(); cam.r = Math.min(30, Math.max(6, cam.r * (1 + Math.sign(e.deltaY) * 0.08))); }, { passive: false });
+
+scene.add(new THREE.AmbientLight(0xffffff, 0.55));
+const sol = new THREE.DirectionalLight(0xffffff, 0.8); sol.position.set(4, 10, 6); scene.add(sol);
+
+// piso graduado cada 15°
+const piso = new THREE.Mesh(new THREE.CircleGeometry(R_PISO, 96), new THREE.MeshBasicMaterial({ color: 0x1b232d }));
+piso.rotation.x = -Math.PI / 2; scene.add(piso);
+const aro = new THREE.Mesh(new THREE.RingGeometry(R_PISO - 0.02, R_PISO, 96), new THREE.MeshBasicMaterial({ color: 0x3a4757, side: THREE.DoubleSide }));
+aro.rotation.x = -Math.PI / 2; aro.position.y = 0.005; scene.add(aro);
+const marcas = [];
+for (let g = 0; g < 360; g += 15) {
+  const a = g * Math.PI / 180, largo = (g % 90 === 0) ? 0.35 : 0.18;
+  marcas.push(new THREE.Vector3(R_PISO * Math.cos(a), 0.01, -R_PISO * Math.sin(a)));
+  marcas.push(new THREE.Vector3((R_PISO - largo) * Math.cos(a), 0.01, -(R_PISO - largo) * Math.sin(a)));
+}
+scene.add(new THREE.LineSegments(new THREE.BufferGeometry().setFromPoints(marcas), new THREE.LineBasicMaterial({ color: 0x4b5a6b })));
+
+// techo, línea de equilibrio, cable y esfera
+const techo = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.12, 1.4), new THREE.MeshPhongMaterial({ color: 0x4a5563 }));
+techo.position.y = L + 0.06; scene.add(techo);
+scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0, 0), new THREE.Vector3(0, L, 0)]),
+                         new THREE.LineBasicMaterial({ color: 0x2c3744 })));
+const cableGeo = new THREE.BufferGeometry();
+cableGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+const cable = new THREE.Line(cableGeo, new THREE.LineBasicMaterial({ color: 0xdde3ea }));
+cable.frustumCulled = false; scene.add(cable);
+const esfera = new THREE.Mesh(new THREE.SphereGeometry(0.2, 32, 24), new THREE.MeshPhongMaterial({ color: 0xc9a86a, shininess: 90, specular: 0x666655 }));
+scene.add(esfera);
+const sombra = new THREE.Mesh(new THREE.CircleGeometry(0.16, 24), new THREE.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.45 }));
+sombra.rotation.x = -Math.PI / 2; sombra.position.y = 0.012; scene.add(sombra);
+
+// huella en el piso
+const N_HUELLA = 700, huellaPos = new Float32Array(N_HUELLA * 3); let huellaN = 0;
+const huellaGeo = new THREE.BufferGeometry();
+huellaGeo.setAttribute('position', new THREE.BufferAttribute(huellaPos, 3)); huellaGeo.setDrawRange(0, 0);
+const huella = new THREE.Line(huellaGeo, new THREE.LineBasicMaterial({ color: 0x8b97a7, transparent: true, opacity: 0.25 }));
+huella.frustumCulled = false; scene.add(huella);
+function limpiarHuella() { huellaN = 0; huellaGeo.setDrawRange(0, 0); }
+
+// plano real (ámbar)
+const planoGeo = new THREE.BufferGeometry();
+planoGeo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(6), 3));
+const planoLinea = new THREE.Line(planoGeo, new THREE.LineBasicMaterial({ color: 0xf2b84b }));
+planoLinea.frustumCulled = false; scene.add(planoLinea);
+
+// torre de sensores (cian): brazo desde el centro + travesaño con los dos sensores, gira con el motor
+const torre = new THREE.Group(); scene.add(torre);
+const matTorre = new THREE.MeshPhongMaterial({ color: 0x5bc0de });
+let brazo = null, travesano = null, s1 = null, s2 = null;
+function armarTorre(ds) {
+  torre.clear();
+  const r = ds * K;                                     // distancia dibujada al centro
+  brazo = new THREE.Mesh(new THREE.BoxGeometry(r, 0.04, 0.05), new THREE.MeshPhongMaterial({ color: 0x3d7f94 }));
+  brazo.position.set(r / 2, 0.03, 0); torre.add(brazo);
+  travesano = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.5), new THREE.MeshPhongMaterial({ color: 0x3d7f94 }));
+  travesano.position.set(r, 0.06, 0); torre.add(travesano);
+  s1 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.1), matTorre); s1.position.set(r, 0.12, -0.22); torre.add(s1);
+  s2 = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.12, 0.1), matTorre); s2.position.set(r, 0.12, 0.22); torre.add(s2);
+}
+
+function dibujar() {
+  requestAnimationFrame(dibujar);
+  if (estado && estado.listo) {
+    let x = estado.x, y = estado.y;
+    if (!estado.pausado && estado.velocidad <= 2) {       // suaviza entre consultas a velocidades bajas
+      const dt = Math.min((performance.now() - tRecibido) / 1000, 0.1) * estado.velocidad;
+      x += estado.vx * dt; y += estado.vy * dt;
+    }
+    const bx = K * x, bz = -K * y, r = Math.hypot(bx, bz);  // física (x, y) -> escena (x, -z)
+    const by = L - Math.sqrt(Math.max(L * L - r * r, 0));
+    esfera.position.set(bx, by + 0.2, bz);
+    const p = cableGeo.attributes.position.array;
+    p[0] = 0; p[1] = L; p[2] = 0; p[3] = bx; p[4] = by + 0.4; p[5] = bz;
+    cableGeo.attributes.position.needsUpdate = true;
+    sombra.position.set(bx, 0.012, bz);
+    if (huellaN === N_HUELLA) { huellaPos.copyWithin(0, 3); huellaN--; }
+    huellaPos.set([bx, 0.015, bz], huellaN * 3); huellaN++;
+    huellaGeo.setDrawRange(0, huellaN); huellaGeo.attributes.position.needsUpdate = true;
+    const a = estado.az_plano_real * Math.PI / 180, q = planoGeo.attributes.position.array, c = R_PISO - 0.05;
+    q[0] = -c * Math.cos(a); q[1] = 0.02; q[2] = c * Math.sin(a); q[3] = c * Math.cos(a); q[4] = 0.02; q[5] = -c * Math.sin(a);
+    planoGeo.attributes.position.needsUpdate = true;
+    torre.rotation.y = estado.az_torre * Math.PI / 180;    // el motor gira la torre
+  }
+  ubicarCamara();
+  renderer.render(scene, camera);
+}
+
+// ------------------------------------------------------------------ formato
+const f = (v, d) => v === null || v === undefined ? '-' : v.toLocaleString('es-AR', { minimumFractionDigits: d, maximumFractionDigits: d });
+const ent = v => v.toLocaleString('es-AR');
+function fmtTiempo(s) {
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600), m = Math.floor(s % 3600 / 60), seg = Math.floor(s % 60);
+  const dos = n => String(n).padStart(2, '0');
+  return (d > 0 ? d + ' d ' : '') + dos(h) + ':' + dos(m) + ':' + dos(seg);
+}
+const ponerTexto = (id, t) => document.getElementById(id).textContent = t;
+
+// ------------------------------------------------------------------ comunicación con el servidor
+let pidiendo = false;
+async function pedirEstado() {
+  if (pidiendo) return;
+  pidiendo = true;
+  try {
+    const e = await (await fetch('/api/estado')).json();
+    if (!e.listo) { pidiendo = false; return; }
+    if (sesionActual !== e.sesion_id) {
+      sesionActual = e.sesion_id; ultimoSeq = 0;
+      document.getElementById('cuerpo').innerHTML = ''; limpiarHuella(); armarTorre(e.d_s);
+    }
+    estado = e; tRecibido = performance.now(); L = e.largo;
+    ponerTexto('i-tiempo', fmtTiempo(e.t_sim));
+    ponerTexto('i-reloj', e.timestamp_sim.slice(0, 19));
+    ponerTexto('i-periodo', e.periodo === null ? '-' : f(e.periodo, 3) + ' s');
+    ponerTexto('i-tramo', e.tramo);
+    ponerTexto('i-ciclos', ent(e.ciclos));
+    ponerTexto('i-azimut', f(e.azimut, 2) + ' °');
+    ponerTexto('i-resol', f(e.resolucion, 2) + ' ° por paso');
+    ponerTexto('i-omega', e.omega === null
+      ? (e.omega_faltan_min > 0 ? 'faltan ' + Math.ceil(e.omega_faltan_min) + ' min simulados' : 'calculando…')
+      : f(e.omega, 3) + ' ± ' + f(e.omega_se, 3) + ' °/h');
+    ponerTexto('i-teorica', f(e.omega_teorica, 3) + ' °/h');
+    ponerTexto('i-cumpl', e.cumplimiento === null ? '-' : f(e.cumplimiento, 2) + ' %');
+    ponerTexto('i-huecos', e.huecos);
+    ponerTexto('i-lineas', ent(e.lineas_ok + e.lineas_descartadas) + ' / ' + ent(e.lineas_descartadas));
+    ponerTexto('i-incompletos', ent(e.ciclos_incompletos));
+    ponerTexto('i-desvio', f(e.desvio_real, 2) + ' °');
+    const chip = document.getElementById('estado-chip');
+    chip.textContent = e.estado === 'BARRIDO' ? 'Pérdida de referencia: barriendo' : 'Siguiendo el plano';
+    chip.classList.toggle('barrido', e.estado === 'BARRIDO');
+    document.getElementById('btn-pausa').textContent = e.pausado ? 'Continuar' : 'Pausa';
+    document.getElementById('btn-cable').classList.toggle('alerta', e.cable_ruidoso);
+    document.querySelectorAll('#botones-vel button').forEach(b => b.classList.toggle('activo', Number(b.dataset.v) === e.velocidad));
+  } catch (err) { /* servidor ocupado o reiniciando: se reintenta */ }
+  pidiendo = false;
+}
+
+async function pedirEventos() {
+  if (sesionActual === null) return;
+  try {
+    const evs = await (await fetch(`/api/eventos?desde=${ultimoSeq}`)).json();
+    if (!evs.length) return;
+    const cuerpo = document.getElementById('cuerpo');
+    for (const ev of evs) {                                   // llegan del más viejo al más nuevo
+      const tr = document.createElement('tr');
+      const clase = 't-' + ev.tipo.split(' ')[0];
+      tr.dataset.tipo = ev.tipo;
+      if (ocultos.has(ev.tipo)) tr.style.display = 'none';
+      tr.innerHTML = `<td>${ev.timestamp}</td><td class="${clase}">${ev.tipo}</td><td>${ev.detalle}</td><td class="linea"></td>`;
+      tr.lastChild.textContent = ev.linea;                    // texto plano: la línea puede venir dañada
+      cuerpo.insertBefore(tr, cuerpo.firstChild);
+    }
+    ultimoSeq = evs[evs.length - 1].seq;
+    while (cuerpo.children.length > MAX_FILAS) cuerpo.removeChild(cuerpo.lastChild);
+  } catch (err) { /* idem */ }
+}
+
+function control(datos) {
+  fetch('/api/control', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datos) });
+}
+
+[1, 10, 60, 360, 1000].forEach(v => {
+  const b = document.createElement('button');
+  b.textContent = v + '×'; b.dataset.v = v; b.onclick = () => control({ velocidad: v });
+  document.getElementById('botones-vel').appendChild(b);
+});
+document.getElementById('btn-pausa').onclick = () => control({ pausado: !(estado && estado.pausado) });
+document.getElementById('btn-reiniciar').onclick = () => control({ reiniciar: true });
+document.getElementById('btn-perturbar').onclick = () => control({ perturbar: true });
+document.getElementById('btn-cable').onclick = () => control({ cable_ruidoso: !(estado && estado.cable_ruidoso) });
+document.querySelectorAll('#filtros input').forEach(chk => chk.onchange = () => {
+  chk.checked ? ocultos.delete(chk.dataset.t) : ocultos.add(chk.dataset.t);
+  document.querySelectorAll('#cuerpo tr').forEach(tr => tr.style.display = ocultos.has(tr.dataset.tipo) ? 'none' : '');
+});
+
+ajustarTamano();
+setInterval(pedirEstado, 33);
+setInterval(pedirEventos, 250);
+dibujar();
+</script>
+</body>
+</html>

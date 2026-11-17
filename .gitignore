@@ -1,0 +1,11 @@
+# base de datos generada al ejecutar
+pendulo.db
+pendulo.db-*
+*.db
+*.db-wal
+*.db-shm
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
