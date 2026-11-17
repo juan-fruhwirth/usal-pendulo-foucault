@@ -11,7 +11,7 @@ Simulador del sistema de control y medición de la precesión del péndulo de Fo
 ## Instalación
 
 ```bash
-git clone https://github.com/<usuario>/usal-pendulo-foucault.git
+git clone https://github.com/juan-fruhwirth/usal-pendulo-foucault.git
 cd usal-pendulo-foucault
 python -m pip install -r requirements.txt
 ```
